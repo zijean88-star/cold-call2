@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cold Call 紀錄系統</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Georgia','Times New Roman',serif; background:#FAFAFA; color:#333029; line-height:1.6; padding:16px; }
+h1 { text-align:center; font-size:22px; margin-bottom:12px; color:#333029; }
+.search-bar { max-width:600px; margin:0 auto 16px; position:relative; }
+.search-bar input { width:100%; padding:10px 14px 10px 36px; border:1px solid #ccc; border-radius:6px; font-size:14px; }
+.search-bar::before { content:"🔍"; position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:14px; }
+#search-results { max-width:600px; margin:0 auto 16px; background:#fff; border:1px solid #ddd; border-radius:6px; display:none; max-height:400px; overflow-y:auto; }
+.stats-bar { display:flex; justify-content:center; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
+.stat-box { background:#fff; border:1px solid #ddd; border-radius:6px; padding:8px 14px; text-align:center; min-width:80px; }
+.stat-box .num { font-size:20px; font-weight:bold; color:#8B6914; }
+.stat-box .label { font-size:11px; color:#666; }
+.tab-labels { display:flex; justify-content:center; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+.tab-btn { padding:6px 14px; border:1px solid #8B6914; border-radius:20px; background:#fff; color:#8B6914; cursor:pointer; font-size:12px; transition:all 0.2s; }
+.tab-btn:hover { background:#92501E; color:#fff; border-color:#92501E; }
+.tab-btn.active { background:#8B6914; color:#fff; }
+.info-bar { text-align:center; font-size:11px; color:#7A7462; margin-bottom:16px; background:#F5F0E8; padding:8px; border-radius:6px; }
+.company-list { max-width:700px; margin:0 auto; }
+.ccard { background:#fff; border:1px solid #ddd; border-radius:8px; margin-bottom:8px; overflow:hidden; }
+.ccard.remind-today { border-left:4px solid #DC2626; }
+.ccard-header { padding:12px 14px; cursor:pointer; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.ccard-header:hover { background:#F9F6F0; }
+.cname { font-weight:bold; font-size:14px; }
+.tag { font-size:10px; padding:2px 8px; border-radius:10px; }
+.tag-opportunity { background:#FEF3C7; color:#92400E; }
+.tag-missed { background:#FEE2E2; color:#991B1B; }
+.tag-pending { background:#DAE9F8; color:#1E40AF; }
+.tag-closed { background:#E5E7EB; color:#374151; }
+.tag-remind { background:#FEE2E2; color:#DC2626; font-weight:bold; }
+.ccard-body { display:none; padding:12px 14px; border-top:1px solid #eee; }
+.ccard.open .ccard-body { display:block; }
+.cinfo { font-size:12px; color:#555; margin-bottom:8px; }
+.notes-history { font-size:12px; color:#8B6914; margin-bottom:12px; padding:6px; background:#FFFBEB; border-radius:4px; }
+.edit-form { margin-top:10px; }
+.frow { margin-bottom:10px; }
+.frow label { display:block; font-size:11px; color:#666; margin-bottom:3px; }
+.frow input, .frow select, .frow textarea { width:100%; padding:6px 8px; border:1px solid #ccc; border-radius:4px; font-size:13px; }
+.frow textarea { resize:vertical; }
+.checkbox-group { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+.checkbox-group label { font-size:12px; display:flex; align-items:center; gap:3px; }
+.btn-save { background:#8B6914; color:#fff; border:none; padding:10px 20px; border-radius:6px; cursor:pointer; font-size:13px; width:100%; }
+.btn-save:hover { background:#92501E; }
+.loading { text-align:center; padding:40px; color:#999; }
+.remind-banner { max-width:700px; margin:0 auto 12px; background:#FEF2F2; border:1px solid #FECACA; border-radius:8px; padding:12px; }
+.remind-banner-title { font-size:14px; font-weight:bold; color:#DC2626; margin-bottom:6px; }
+.remind-item { font-size:12px; color:#555; padding:4px 0; cursor:pointer; }
+.remind-item:hover { color:#DC2626; text-decoration:underline; }
+</style>
+</head>
+<body>
+<h1>Cold Call📞 紀錄系統</h1>
+<div class="search-bar">
+<input type="text" id="searchInput" placeholder="搜尋公司名稱、電話、聯絡人、地址、email..." oninput="searchCompany()">
+</div>
+<div id="search-results"></div>
+<div class="stats-bar" id="statsBar"></div>
+<div class="tab-labels" id="tabLabels">
+<div class="tab-btn active" onclick="filterTab('all')">全部</div>
+<div class="tab-btn" onclick="filterTab('待聯繫')">待聯繫</div>
+<div class="tab-btn" onclick="filterTab('有機會點')">有機會點</div>
+<div class="tab-btn" onclick="filterTab('未接')">未接</div>
+<div class="tab-btn" onclick="filterTab('不需要')">不需要</div>
+<div class="tab-btn" onclick="filterTab('remind')">🔔 今日提醒</div>
+</div>
+<div class="info-bar">點擊公司名稱展開表單 → 填寫資訊 → 按「儲存紀錄」→ 資料自動同步到 Google Sheets<br>提醒規則：更新日期 +2 天（週末自動順延至週一）</div>
+<div id="remindBanner"></div>
+<div class="company-list" id="companyList">
+<div class="loading">⏳ 正在從 Google Sheets 載入資料...</div>
+</div>
+<script>
+var API_URL = "https://script.google.com/macros/s/AKfycbzAuTuVM2XgOdPOiZn3kQO8qSdyrd5JucALyNq0wv7-kRIN0Jzc71qYe-B8pmEhpsfZ0w/exec";
+var allData = [];
+var currentFilter = "all";
+ 
+window.onload = function() { loadData(); };
+ 
+function loadData() {
+  fetch(API_URL)
+  .then(function(res) { return res.json(); })
+  .then(function(data) {
+    allData = data;
+    renderStats();
+    renderRemindBanner();
+    renderList();
+  })
+  .catch(function(err) {
+    document.getElementById("companyList").innerHTML = '<div class="loading">❌ 載入失敗，請重新整理頁面</div>';
+  });
+}
+ 
+// 計算提醒日期：+2天，週末順延到週一
+function getRemindDate(dateStr) {
+  if (!dateStr) return null;
+  var str = String(dateStr).trim();
+  var parts = str.split("/");
+  var d;
+  if (parts.length === 3) {
+    d = new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]));
+  } else if (parts.length === 2) {
+    d = new Date(2026, parseInt(parts[0])-1, parseInt(parts[1]));
+  } else {
+    return null;
+  }
+  if (isNaN(d.getTime())) return null;
+  d.setDate(d.getDate() + 2);
+  var day = d.getDay();
+  if (day === 6) d.setDate(d.getDate() + 2); // 週六 → 週一
+  if (day === 0) d.setDate(d.getDate() + 1); // 週日 → 週一
+  return d;
+}
+ 
+function isRemindToday(c) {
+  var status = (c["狀態"]||"").toString().trim();
+  if (status === "不需要") return false;
+  var remindDate = getRemindDate(c["更新日期"]);
+  if (!remindDate) return false;
+  var today = new Date();
+  today.setHours(0,0,0,0);
+  remindDate.setHours(0,0,0,0);
+  return remindDate.getTime() <= today.getTime();
+}
+ 
+function renderRemindBanner() {
+  var reminders = allData.filter(function(c) { return isRemindToday(c); });
+  var banner = document.getElementById("remindBanner");
+  if (reminders.length === 0) {
+    banner.innerHTML = "";
+    return;
+  }
+  var html = '<div class="remind-banner">';
+  html += '<div class="remind-banner-title">🔔 今日需追蹤（' + reminders.length + ' 家）</div>';
+  reminders.forEach(function(c) {
+    var name = c["公司名稱"] || "未命名";
+    var status = (c["狀態"]||"").toString().trim();
+    html += '<div class="remind-item" onclick="jumpToCompany(\'' + escapeHtml(name).replace(/'/g,"\\'") + '\')">'; 
+    html += '• ' + escapeHtml(name) + ' (' + status + ')';
+    html += '</div>';
+  });
+  html += '</div>';
+  banner.innerHTML = html;
+}
+ 
+function renderStats() {
+  var counts = { "待聯繫":0, "有機會點":0, "未接":0, "不需要":0 };
+  var remindCount = 0;
+  allData.forEach(function(c) {
+    var s = (c["狀態"] || "").toString().trim();
+    if (counts[s] !== undefined) counts[s]++;
+    if (isRemindToday(c)) remindCount++;
+  });
+  var total = allData.length;
+  var html = '<div class="stat-box"><div class="num">' + counts["待聯繫"] + '</div><div class="label">待聯繫</div></div>';
+  html += '<div class="stat-box"><div class="num">' + counts["有機會點"] + '</div><div class="label">有機會點</div></div>';
+  html += '<div class="stat-box"><div class="num">' + counts["未接"] + '</div><div class="label">未接</div></div>';
+  html += '<div class="stat-box"><div class="num">' + counts["不需要"] + '</div><div class="label">不需要</div></div>';
+  html += '<div class="stat-box"><div class="num">' + total + '</div><div class="label">總計</div></div>';
+  document.getElementById("statsBar").innerHTML = html;
+  var tabs = document.querySelectorAll(".tab-btn");
+  tabs[0].textContent = "全部(" + total + ")";
+  tabs[1].textContent = "待聯繫(" + counts["待聯繫"] + ")";
+  tabs[2].textContent = "有機會點(" + counts["有機會點"] + ")";
+  tabs[3].textContent = "未接(" + counts["未接"] + ")";
+  tabs[4].textContent = "不需要(" + counts["不需要"] + ")";
+  tabs[5].textContent = "🔔 今日提醒(" + remindCount + ")";
+}
+ 
+function renderList() {
+  var list = document.getElementById("companyList");
+  var filtered = allData;
+  if (currentFilter === "remind") {
+    filtered = allData.filter(function(c) { return isRemindToday(c); });
+  } else if (currentFilter !== "all") {
+    filtered = allData.filter(function(c) { return (c["狀態"] || "").toString().trim() === currentFilter; });
+  }
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="loading">沒有符合的公司</div>';
+    return;
+  }
+  var html = "";
+  filtered.forEach(function(c) {
+    var realIdx = allData.indexOf(c);
+    var status = (c["狀態"] || "待聯繫").toString().trim();
+    var tagClass = "tag-pending";
+    if (status === "有機會點") tagClass = "tag-opportunity";
+    else if (status === "未接") tagClass = "tag-missed";
+    else if (status === "不需要") tagClass = "tag-closed";
+    var name = c["公司名稱"] || "未命名";
+    var addr = c["地址"] || "";
+    var phone = c["電話"] || "";
+    var contact = c["聯絡人"] || "";
+    var email = c["email"] || "";
+    var aiUsage = c["AI使用"] || "";
+    var aiModel = c["AI模型"] || "";
+    var notes = c["備註"] || "";
+    var updateDate = c["更新日期"] || "";
+    var remind = isRemindToday(c);
+    html += '<div class="ccard' + (remind ? ' remind-today' : '') + '" id="card-' + realIdx + '">';
+    html += '<div class="ccard-header" onclick="toggleCard(' + realIdx + ')">';
+    html += '<span class="cname">' + escapeHtml(name) + '</span>';
+    html += '<span class="tag ' + tagClass + '">' + status + '</span>';
+    if (remind) html += '<span class="tag tag-remind">🔔 今天追蹤</span>';
+    if (updateDate) html += '<span style="font-size:10px;color:#999">更新:' + updateDate + '</span>';
+    html += '</div>';
+    html += '<div class="ccard-body">';
+    html += '<div class="cinfo">';
+    if (addr) html += '📍 ' + escapeHtml(addr) + '<br>';
+    if (phone) html += '📞 ' + escapeHtml(phone) + '<br>';
+    if (contact) html += '👤 ' + escapeHtml(contact) + '<br>';
+    if (email) html += '✉️ ' + escapeHtml(email) + '<br>';
+    html += '</div>';
+    if (notes) html += '<div class="notes-history">📝 ' + escapeHtml(notes) + '</div>';
+    html += '<form class="edit-form" onsubmit="return false;">';
+    html += '<div class="frow"><label>公司名稱</label><input type="text" name="company_name" value="' + escapeHtml(name) + '"></div>';
+    html += '<div class="frow"><label>地址</label><input type="text" name="address" value="' + escapeHtml(addr) + '"></div>';
+    html += '<div class="frow"><label>電話</label><input type="tel" name="phone" value="' + escapeHtml(phone) + '"></div>';
+    html += '<div class="frow"><label>聯絡人</label><input type="text" name="contact" value="' + escapeHtml(contact) + '"></div>';
+    html += '<div class="frow"><label>Email</label><input type="text" name="email" value="' + escapeHtml(email) + '"></div>';
+    html += '<div class="frow"><label>狀態</label><select name="status">';
+    ["待聯繫","有機會點","未接","不需要"].forEach(function(opt) {
+      html += '<option value="' + opt + '"' + (opt===status?' selected':'') + '>' + opt + '</option>';
+    });
+    html += '</select></div>';
+    html += '<div class="frow"><label>AI 使用狀況</label><select name="ai_usage">';
+    html += '<option value="">-- 選擇 --</option>';
+    ["有在使用","沒有使用","規劃導入中","不確定"].forEach(function(opt) {
+      html += '<option value="' + opt + '"' + (opt===aiUsage?' selected':'') + '>' + opt + '</option>';
+    });
+    html += '</select></div>';
+    html += '<div class="frow"><label>AI 模型</label><div class="checkbox-group">';
+    ["Gemini","Claude","ChatGPT","Quick","其他"].forEach(function(m) {
+      var checked = String(aiModel).indexOf(m) > -1 ? " checked" : "";
+      html += '<label><input type="checkbox" name="ai_models" value="' + m + '"' + checked + '> ' + m + '</label>';
+    });
+    html += '</div></div>';
+    html += '<div class="frow"><label>備註</label><textarea name="notes" rows="3">' + escapeHtml(notes) + '</textarea></div>';
+    html += '<button type="button" class="btn-save" onclick="saveRecord(this)">💾 儲存紀錄</button>';
+    html += '</form></div></div>';
+  });
+  list.innerHTML = html;
+}
+ 
+function toggleCard(idx) {
+  var card = document.getElementById("card-" + idx);
+  card.classList.toggle("open");
+}
+ 
+function filterTab(status) {
+  currentFilter = status;
+  var tabs = document.querySelectorAll(".tab-btn");
+  tabs.forEach(function(t) { t.classList.remove("active"); });
+  event.target.classList.add("active");
+  renderList();
+}
+ 
+function searchCompany() {
+  var q = document.getElementById("searchInput").value.trim().toLowerCase();
+  var r = document.getElementById("search-results");
+  if (q.length < 1) { r.innerHTML = ""; r.style.display = "none"; return; }
+  var matches = allData.filter(function(c) {
+    var text = (c["公司名稱"]||"") + (c["電話"]||"") + (c["聯絡人"]||"") + (c["地址"]||"") + (c["email"]||"") + (c["備註"]||"");
+    return text.toString().toLowerCase().indexOf(q) > -1;
+  });
+  if (matches.length === 0) {
+    r.innerHTML = '<div style="padding:12px;text-align:center;color:#999;font-size:12px">找不到符合「' + q + '」的公司</div>';
+    r.style.display = "block";
+    return;
+  }
+  var html = "";
+  matches.forEach(function(c) {
+    var status = (c["狀態"]||"待聯繫").toString().trim();
+    var tagClass = "tag-pending";
+    if (status === "有機會點") tagClass = "tag-opportunity";
+    else if (status === "未接") tagClass = "tag-missed";
+    else if (status === "不需要") tagClass = "tag-closed";
+    var cname = escapeHtml(c["公司名稱"]||"");
+    html += '<div style="padding:10px;border-bottom:1px solid #eee;cursor:pointer" onclick="jumpToCompany(\'' + cname.replace(/'/g,"\\'") + '\')">'; 
+    html += '<strong>' + cname + '</strong> <span class="tag ' + tagClass + '">' + status + '</span>';
+    html += '<div style="font-size:11px;color:#555">' + escapeHtml(c["電話"]||"") + ' | ' + escapeHtml(c["聯絡人"]||"") + '</div>';
+    html += '</div>';
+  });
+  r.innerHTML = html;
+  r.style.display = "block";
+}
+ 
+function jumpToCompany(name) {
+  document.getElementById("search-results").style.display = "none";
+  document.getElementById("searchInput").value = "";
+  currentFilter = "all";
+  var tabs = document.querySelectorAll(".tab-btn");
+  tabs.forEach(function(t) { t.classList.remove("active"); });
+  tabs[0].classList.add("active");
+  renderList();
+  for (var i = 0; i < allData.length; i++) {
+    if ((allData[i]["公司名稱"]||"") === name) {
+      var card = document.getElementById("card-" + i);
+      if (card) {
+        card.classList.add("open");
+        card.scrollIntoView({ behavior:"smooth", block:"center" });
+      }
+      break;
+    }
+  }
+}
+ 
+function saveRecord(btn) {
+  var form = btn.closest(".edit-form");
+  var aiModels = [];
+  form.querySelectorAll('input[name="ai_models"]:checked').forEach(function(cb) {
+    aiModels.push(cb.value);
+  });
+  var data = {
+    "公司名稱": form.querySelector('input[name="company_name"]').value,
+    "地址": form.querySelector('input[name="address"]').value,
+    "電話": form.querySelector('input[name="phone"]').value,
+    "聯絡人": form.querySelector('input[name="contact"]').value,
+    "email": form.querySelector('input[name="email"]').value,
+    "狀態": form.querySelector('select[name="status"]').value,
+    "AI使用": form.querySelector('select[name="ai_usage"]').value,
+    "AI模型": aiModels.join(", "),
+    "備註": form.querySelector('textarea[name="notes"]').value
+  };
+  btn.textContent = "⏳ 儲存中...";
+  btn.disabled = true;
+  fetch(API_URL, {
+    method: "POST",
+    body: JSON.stringify(data)
+  })
+  .then(function(res) { return res.json(); })
+  .then(function(result) {
+    if (result.status === "updated") {
+      btn.textContent = "✓ 已更新";
+      btn.style.background = "#FED7AA";
+      btn.style.color = "#92501E";
+    } else {
+      btn.textContent = "✓ 已新增";
+      btn.style.background = "#C6F6D5";
+      btn.style.color = "#276749";
+    }
+    setTimeout(function() {
+      btn.textContent = "💾 儲存紀錄";
+      btn.style.background = "#8B6914";
+      btn.style.color = "#fff";
+      btn.disabled = false;
+      loadData();
+    }, 1500);
+  })
+  .catch(function(err) {
+    btn.textContent = "❌ 儲存失敗";
+    btn.style.background = "#FED7D7";
+    btn.style.color = "#9B2C2C";
+    setTimeout(function() {
+      btn.textContent = "💾 儲存紀錄";
+      btn.style.background = "#8B6914";
+      btn.style.color = "#fff";
+      btn.disabled = false;
+    }, 2000);
+  });
+}
+ 
+function escapeHtml(str) {
+  if (!str) return "";
+  return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+</script>
+</body>
+</html>
