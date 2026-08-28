@@ -54,6 +54,15 @@ h1 { text-align:center; font-size:22px; margin-bottom:12px; color:#333029; }
 </style>
 </head>
 <body>
+ <div id="loginScreen" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#FAFAFA;display:flex;align-items:center;justify-content:center;z-index:9999;">
+<div style="text-align:center;font-family:Georgia,serif;">
+<h2 style="color:#333029;margin-bottom:16px;">🔒 請輸入密碼</h2>
+<input type="password" id="pwdInput" placeholder="請輸入密碼..." style="padding:10px 14px;border:1px solid #ccc;border-radius:6px;font-size:14px;width:220px;">
+<br><br>
+<button onclick="checkPwd()" style="background:#8B6914;color:#fff;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;font-size:14px;">進入系統</button>
+<p id="pwdError" style="color:#DC2626;font-size:12px;margin-top:10px;display:none;">密碼錯誤，請重新輸入</p>
+</div>
+</div>
 <h1>Cold Call📞 紀錄系統</h1>
 <div class="search-bar">
 <input type="text" id="searchInput" placeholder="搜尋公司名稱、電話、聯絡人、地址、email..." oninput="searchCompany()">
@@ -367,6 +376,18 @@ function escapeHtml(str) {
   if (!str) return "";
   return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
+ function checkPwd() {
+  var pwd = document.getElementById("pwdInput").value;
+  if (pwd === "Jane2026") {
+    document.getElementById("loginScreen").style.display = "none";
+  } else {
+    document.getElementById("pwdError").style.display = "block";
+  }
+}
+document.getElementById("pwdInput").addEventListener("keyup", function(e) {
+  if (e.key === "Enter") checkPwd();
+});
+
 </script>
 </body>
 </html>
