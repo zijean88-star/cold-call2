@@ -158,7 +158,7 @@ function renderRemindBanner() {
 }
  
 function renderStats() {
-  var counts = { "待聯繫":0, "有機會點":0, "未接":0, "不需要":0 };
+  var counts = { "待聯繫":0, "有機會點":0, "未接":0, "不需要":0, "活動通知":0 };
   var remindCount = 0;
   allData.forEach(function(c) {
     var s = (c["狀態"] || "").toString().trim();
@@ -178,7 +178,8 @@ function renderStats() {
   tabs[2].textContent = "有機會點(" + counts["有機會點"] + ")";
   tabs[3].textContent = "未接(" + counts["未接"] + ")";
   tabs[4].textContent = "不需要(" + counts["不需要"] + ")";
-  tabs[5].textContent = "🔔 今日提醒(" + remindCount + ")";
+  tabs[5].textContent = "活動通知(" + counts["活動通知"] + ")";
+  tabs[6].textContent = "🔔 今日提醒(" + remindCount + ")";
 }
  
 function renderList() {
