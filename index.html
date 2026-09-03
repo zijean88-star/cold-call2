@@ -32,6 +32,7 @@ h1 { text-align:center; font-size:22px; margin-bottom:12px; color:#333029; }
 .tag-missed { background:#FEE2E2; color:#991B1B; }
 .tag-pending { background:#DAE9F8; color:#1E40AF; }
 .tag-closed { background:#E5E7EB; color:#374151; }
+.tag-notify { background:#DBEAFE; color:#1E40AF; }
 .tag-remind { background:#FEE2E2; color:#DC2626; font-weight:bold; }
 .ccard-body { display:none; padding:12px 14px; border-top:1px solid #eee; }
 .ccard.open .ccard-body { display:block; }
@@ -75,6 +76,7 @@ h1 { text-align:center; font-size:22px; margin-bottom:12px; color:#333029; }
 <div class="tab-btn" onclick="filterTab('有機會點')">有機會點</div>
 <div class="tab-btn" onclick="filterTab('未接')">未接</div>
 <div class="tab-btn" onclick="filterTab('不需要')">不需要</div>
+<div class="tab-btn" onclick="filterTab('活動通知')">活動通知</div>
 <div class="tab-btn" onclick="filterTab('remind')">🔔 今日提醒</div>
 </div>
 <div class="info-bar">點擊公司名稱展開表單 → 填寫資訊 → 按「儲存紀錄」→ 資料自動同步到 Google Sheets<br>提醒規則：更新日期 +2 天（週末自動順延至週一）</div>
@@ -126,7 +128,7 @@ function getRemindDate(dateStr) {
  
 function isRemindToday(c) {
   var status = (c["狀態"]||"").toString().trim();
-  if (status === "不需要") return false;
+  if (status === "不需要" || status === "活動通知") return false;
   var remindDate = getRemindDate(c["更新日期"]);
   if (!remindDate) return false;
   var today = new Date();
@@ -199,6 +201,7 @@ function renderList() {
     if (status === "有機會點") tagClass = "tag-opportunity";
     else if (status === "未接") tagClass = "tag-missed";
     else if (status === "不需要") tagClass = "tag-closed";
+    else if (status === "活動通知") tagClass = "tag-notify";
     var name = c["公司名稱"] || "未命名";
     var addr = c["地址"] || "";
     var phone = c["電話"] || "";
@@ -231,7 +234,7 @@ function renderList() {
     html += '<div class="frow"><label>聯絡人</label><input type="text" name="contact" value="' + escapeHtml(contact) + '"></div>';
     html += '<div class="frow"><label>Email</label><input type="text" name="email" value="' + escapeHtml(email) + '"></div>';
     html += '<div class="frow"><label>狀態</label><select name="status">';
-    ["待聯繫","有機會點","未接","不需要"].forEach(function(opt) {
+    ["待聯繫","有機會點","未接","不需要","活動通知"].forEach(function(opt) {
       html += '<option value="' + opt + '"' + (opt===status?' selected':'') + '>' + opt + '</option>';
     });
     html += '</select></div>';
@@ -287,6 +290,7 @@ function searchCompany() {
     if (status === "有機會點") tagClass = "tag-opportunity";
     else if (status === "未接") tagClass = "tag-missed";
     else if (status === "不需要") tagClass = "tag-closed";
+    else if (status === "活動通知") tagClass = "tag-notify";
     var cname = escapeHtml(c["公司名稱"]||"");
     html += '<div style="padding:10px;border-bottom:1px solid #eee;cursor:pointer" onclick="jumpToCompany(\'' + cname.replace(/'/g,"\\'") + '\')">'; 
     html += '<strong>' + cname + '</strong> <span class="tag ' + tagClass + '">' + status + '</span>';
